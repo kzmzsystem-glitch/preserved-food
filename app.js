@@ -5,7 +5,6 @@
   var VIEWS = ['scanView', 'buyView', 'useView', 'doneView', 'errView'];
 
   var mode = 'buy';
-  var reader = null;
   var handling = false;
   var currentJan = '';
   var useTotal = 0;
@@ -65,32 +64,87 @@
 
   // ---------- スキャン ----------
 
+  var stream = null;
+  var timer = null;
+  var canvas = document.createElement('canvas');
+  var zxReader = null;
+  var detector = null;
+  var tick = 0;
+
+  // フレームの切り出し範囲(中央を拡大 → やや広め → 全体)を順に試す
+  var CROPS = [[0.7, 0.4], [0.9, 0.6], [1, 1]];
+
+  function decodeFrame(video) {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return Promise.resolve(null);
+    var c = CROPS[tick++ % CROPS.length];
+    var cw = Math.round(vw * c[0]), ch = Math.round(vh * c[1]);
+    var sx = Math.round((vw - cw) / 2), sy = Math.round((vh - ch) / 2);
+    var scale = Math.min(1, 1400 / cw);
+    canvas.width = Math.round(cw * scale);
+    canvas.height = Math.round(ch * scale);
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
+    if (detector) {
+      return detector.detect(canvas).then(function (r) { return r.length ? r[0].rawValue : null; })
+        .catch(function () { return null; });
+    }
+    try {
+      var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(canvas)));
+      return Promise.resolve(zxReader.decodeWithState(bmp).getText());
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+
+  function loop(video) {
+    timer = setTimeout(function () {
+      if (!stream || handling) return;
+      decodeFrame(video).then(function (code) {
+        if (code && validJan(code)) { onJan(code); return; }
+        if (stream) loop(video);
+      });
+    }, 120);
+  }
+
   function startScan() {
     show('scanView');
     handling = false;
     $('manualJan').value = '';
     $('scanHint').textContent = 'バーコード(JAN)を枠に合わせてください';
-    if (!window.ZXing) { $('scanHint').textContent = 'スキャナを読み込めません。番号を入力してください'; return; }
-    var F = ZXing.BarcodeFormat;
-    var hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    reader = new ZXing.BrowserMultiFormatReader(hints, 300);
-    reader.decodeFromConstraints(
-      { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-      $('video'),
-      function (result) {
-        if (!result || handling) return;
-        var code = result.getText();
-        if (validJan(code)) onJan(code);
-      }
-    ).catch(function () {
-      $('scanHint').textContent = 'カメラを起動できません。番号を入力してください';
-    });
+    if (window.BarcodeDetector) {
+      detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+    } else if (window.ZXing) {
+      var F = ZXing.BarcodeFormat;
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      zxReader = new ZXing.MultiFormatReader();
+      zxReader.setHints(hints);
+    } else {
+      $('scanHint').textContent = 'スキャナを読み込めません。番号を入力してください';
+      return;
+    }
+    var video = $('video');
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    }).then(function (s) {
+      stream = s;
+      video.srcObject = s;
+      var track = s.getVideoTracks()[0];
+      try { track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {}); } catch (e) { /* ignore */ }
+      return video.play();
+    }).then(function () { loop(video); })
+      .catch(function () {
+        $('scanHint').textContent = 'カメラを起動できません。番号を入力してください';
+      });
   }
 
   function stopScan() {
-    if (reader) { try { reader.reset(); } catch (e) { /* ignore */ } reader = null; }
+    clearTimeout(timer);
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    $('video').srcObject = null;
   }
 
   function onJan(jan) {
