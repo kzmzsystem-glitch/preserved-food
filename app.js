@@ -112,9 +112,8 @@
     handling = false;
     $('manualJan').value = '';
     $('scanHint').textContent = 'バーコード(JAN)を枠に合わせてください';
-    if (window.BarcodeDetector) {
-      detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
-    } else if (window.ZXing) {
+    detector = null;
+    if (window.ZXing) {
       var F = ZXing.BarcodeFormat;
       var hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
