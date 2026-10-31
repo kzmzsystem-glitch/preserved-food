@@ -101,6 +101,7 @@
     timer = setTimeout(function () {
       if (!stream || handling) return;
       decodeFrame(video).then(function (code) {
+        $('scanHint').textContent = 'バーコード(JAN)を枠に合わせてください (v4・解析' + tick + '回' + (video.videoWidth ? '・' + video.videoWidth + 'px' : '') + ')';
         if (code && validJan(code)) { onJan(code); return; }
         if (stream) loop(video);
       });
