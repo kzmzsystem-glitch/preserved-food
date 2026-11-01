@@ -194,7 +194,10 @@ function hjRegister_(req) {
   var sheet = hjSheet_();
   var rows = hjRows_(sheet);
   hjLinkBlank_(sheet, rows, name, jan);
-  var same =rows.filter(function (r) { return r.jan === jan && r.expiry === expiry && r.count > 0; })[0];
+  // 加算するのは「同じJAN・同じ期限・同じ商品名」の行だけ。名前が1文字でも違えば別商品として新規行にする
+  var same = rows.filter(function (r) {
+    return r.jan === jan && r.expiry === expiry && r.count > 0 && r.name.trim() === name;
+  })[0];
   var total;
   if (same) {
     total = same.count + qty;
