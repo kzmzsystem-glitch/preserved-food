@@ -2,7 +2,7 @@
   'use strict';
   var CFG = window.HJ_CONFIG;
   var $ = function (id) { return document.getElementById(id); };
-  var VIEWS = ['scanView', 'buyView', 'useView', 'doneView', 'errView'];
+  var VIEWS = ['scanView', 'buyView', 'useView', 'stockView', 'doneView', 'errView'];
 
   var mode = 'buy';
   var handling = false;
@@ -306,6 +306,40 @@
     });
   }
 
+  // ---------- 在庫一覧 ----------
+
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + ('0' + d.getDate()).slice(-2);
+  }
+
+  function renderStock() {
+    var q = norm($('stockSearch').value);
+    var t = today();
+    var limit = new Date(); limit.setDate(limit.getDate() + 30);
+    var soon = limit.getFullYear() + '/' + ('0' + (limit.getMonth() + 1)).slice(-2) + '/' + ('0' + limit.getDate()).slice(-2);
+    var list = items.filter(function (it) { return it.total > 0 && (!q || norm(it.name).indexOf(q) >= 0); })
+      .sort(function (a, b) { return a.lots[0].expiry < b.lots[0].expiry ? -1 : a.lots[0].expiry > b.lots[0].expiry ? 1 : 0; });
+    var sum = list.reduce(function (n, it) { return n + it.total; }, 0);
+    $('stockSummary').textContent = list.length + '品目・合計' + sum + '個(期限の近い順)';
+    $('stockList').innerHTML = list.map(function (it) {
+      return '<div class="stock"><div class="top"><span class="nm">' + esc(it.name) + '</span><span class="tt">' + it.total + '個</span></div>' +
+        it.lots.map(function (l) {
+          var cls = l.expiry < t ? ' over' : l.expiry <= soon ? ' soon' : '';
+          var tag = l.expiry < t ? '期限切れ ' : '';
+          return '<div class="lot' + cls + '"><span>' + tag + esc(l.expiry) + '</span><span>' + l.count + '個</span></div>';
+        }).join('') + '</div>';
+    }).join('') || '<div class="hint">該当する在庫はありません</div>';
+  }
+
+  function openStock() {
+    stopScan();
+    show('stockView');
+    $('stockSummary').textContent = '読み込み中…';
+    $('stockList').innerHTML = '';
+    loadItems().then(renderStock);
+  }
+
   // ---------- 共通 ----------
 
   function esc(s) {
@@ -331,8 +365,9 @@
     mode = m;
     $('tabBuy').classList.toggle('on', m === 'buy');
     $('tabUse').classList.toggle('on', m === 'use');
+    $('tabStock').classList.toggle('on', m === 'stock');
     stopScan();
-    startScan();
+    if (m === 'stock') openStock(); else startScan();
   }
 
   function closeApp() {
@@ -345,12 +380,14 @@
     if (!m && q.get('liff.state')) {
       m = new URLSearchParams(q.get('liff.state').replace(/^[^?]*\?/, '')).get('mode');
     }
-    return m === 'use' ? 'use' : 'buy';
+    return m === 'use' || m === 'stock' ? m : 'buy';
   }
 
   function bind() {
     $('tabBuy').onclick = function () { setMode('buy'); };
     $('tabUse').onclick = function () { setMode('use'); };
+    $('tabStock').onclick = function () { setMode('stock'); };
+    $('stockSearch').addEventListener('input', renderStock);
     $('manualBtn').onclick = function () {
       var code = $('manualJan').value.replace(/\D/g, '');
       if (!validJan(code)) return alert('JANコードが正しくありません(8/12/13桁)');

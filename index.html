@@ -41,6 +41,12 @@
   .sug button { display:flex; justify-content:space-between; gap:8px; width:100%; padding:12px; border:0; border-top:1px solid var(--line); background:#fff; font-size:15px; text-align:left; color:var(--ink); }
   .sug button:first-child { border-top:0; }
   .sug small { color:var(--sub); white-space:nowrap; }
+  .stock { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .stock .top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .stock .nm { font-weight:700; font-size:16px; }
+  .stock .tt { font-weight:700; white-space:nowrap; }
+  .stock .lot { font-size:14px; color:var(--sub); margin-top:4px; display:flex; justify-content:space-between; }
+  .stock .lot.soon { color:#b26a00; } .stock .lot.over { color:var(--red); font-weight:600; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -49,6 +55,7 @@
   <div class="tabs">
     <button id="tabBuy" type="button">購入</button>
     <button id="tabUse" type="button">消費</button>
+    <button id="tabStock" type="button">在庫</button>
   </div>
 </header>
 <main>
@@ -101,6 +108,12 @@
     </div>
   </section>
 
+  <section id="stockView" class="hidden">
+    <input id="stockSearch" placeholder="商品名で絞り込み" autocomplete="off">
+    <div class="hint" id="stockSummary"></div>
+    <div id="stockList" style="margin-top:10px"></div>
+  </section>
+
   <section id="doneView" class="hidden">
     <div class="card msg">
       <div class="big" id="doneIcon">✅</div>
@@ -117,7 +130,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script src="config.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="config.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
