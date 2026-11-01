@@ -10,6 +10,8 @@
   var useTotal = 0;
   var items = [];
   var linkName = '';
+  var baseName = '';
+  var baseStatus = '';
 
   function show(id) {
     VIEWS.forEach(function (v) { $(v).classList.toggle('hidden', v !== id); });
@@ -192,6 +194,7 @@
   function openBuy(jan) {
     $('buyJan').textContent = 'JAN ' + jan;
     $('buyName').value = '';
+    baseName = '';
     $('buyQty').value = 1;
     $('buyExpiry').value = '';
     $('buySubmit').disabled = false;
@@ -202,7 +205,9 @@
     api('lookup', { jan: jan }).then(function (r) {
       if (r.name) {
         $('buyName').value = r.name;
-        setStatus('buyNameStatus', '登録済みの商品名を使用しました', 'ok');
+        baseName = r.name;
+        baseStatus = '登録済みの商品名を使用しました';
+        setStatus('buyNameStatus', baseStatus, 'ok');
         return;
       }
       return fetchOff(jan).then(function (n) {
@@ -353,7 +358,15 @@
     };
     attachSuggest($('buyName'), $('buySug'), function () { return items; }, function (it) {
       $('buyName').value = it.name;
-      setStatus('buyNameStatus', it.jan ? 'リストの商品を選択しました' : 'リストの商品を選択しました(JANを紐付けます)', 'ok');
+      baseName = it.name;
+      baseStatus = it.jan ? 'リストの商品を選択しました' : 'リストの商品を選択しました(JANを紐付けます)';
+      setStatus('buyNameStatus', baseStatus, 'ok');
+    });
+    // 選んだ名前を1文字でも変えたら、別の新しい商品として登録する
+    $('buyName').addEventListener('input', function () {
+      if (!baseName) return;
+      if ($('buyName').value.trim() === baseName.trim()) setStatus('buyNameStatus', baseStatus, 'ok');
+      else setStatus('buyNameStatus', '「' + baseName + '」とは別の新しい商品として登録します', 'warn');
     });
     attachSuggest($('useSearch'), $('useSug'), function () {
       return items.filter(function (it) { return it.total > 0 && !it.jan; });
