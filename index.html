@@ -36,6 +36,11 @@
   .msg { text-align:center; padding:28px 12px; }
   .msg .big { font-size:34px; }
   .msg p { font-size:16px; margin:8px 0; }
+  .sug { border:1px solid var(--line); border-radius:8px; background:#fff; margin-top:4px; max-height:260px; overflow:auto; }
+  .sug:empty { display:none; }
+  .sug button { display:flex; justify-content:space-between; gap:8px; width:100%; padding:12px; border:0; border-top:1px solid var(--line); background:#fff; font-size:15px; text-align:left; color:var(--ink); }
+  .sug button:first-child { border-top:0; }
+  .sug small { color:var(--sub); white-space:nowrap; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -63,7 +68,8 @@
     <div class="card">
       <div class="jan" id="buyJan"></div>
       <label>商品名</label>
-      <input id="buyName" placeholder="商品名を入力">
+      <input id="buyName" placeholder="商品名を入力(登録済みの商品は候補から選べます)" autocomplete="off">
+      <div class="sug" id="buySug"></div>
       <div class="status" id="buyNameStatus"></div>
       <label>個数</label>
       <input id="buyQty" type="number" inputmode="numeric" min="1" max="999" value="1">
@@ -79,6 +85,12 @@
       <div class="jan" id="useJan"></div>
       <div class="name" id="useName"></div>
       <div class="status" id="useStatus"></div>
+      <div id="useLink" class="hidden">
+        <label>リストから商品を選んでください</label>
+        <input id="useSearch" placeholder="商品名を入力" autocomplete="off">
+        <div class="sug" id="useSug"></div>
+        <div class="hint" id="useLinkNote"></div>
+      </div>
       <table id="useLots"></table>
       <div id="useForm">
         <label>消費する個数</label>
@@ -105,7 +117,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script src="config.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

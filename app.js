@@ -8,6 +8,8 @@
   var handling = false;
   var currentJan = '';
   var useTotal = 0;
+  var items = [];
+  var linkName = '';
 
   function show(id) {
     VIEWS.forEach(function (v) { $(v).classList.toggle('hidden', v !== id); });
@@ -155,6 +157,36 @@
     if (mode === 'buy') openBuy(jan); else openUse(jan);
   }
 
+  // ---------- 商品候補(リスト) ----------
+
+  function loadItems() {
+    return api('items').then(function (r) { items = r.items || []; }).catch(function () { /* 候補なしで続行 */ });
+  }
+
+  // ひらがな/カタカナ・全角半角・大小文字を区別せず部分一致させる
+  function norm(s) {
+    return String(s).normalize('NFKC').toLowerCase()
+      .replace(/[\u30a1-\u30f6]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0x60); })
+      .replace(/\s+/g, '');
+  }
+
+  function attachSuggest(input, box, getList, onPick) {
+    input.addEventListener('input', function () {
+      var q = norm(input.value);
+      box.innerHTML = '';
+      if (!q) return;
+      getList().filter(function (it) { return norm(it.name).indexOf(q) >= 0; })
+        .slice(0, 8).forEach(function (it) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.innerHTML = '<span>' + esc(it.name) + '</span><small>在庫 ' + it.total + '個</small>';
+          b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+          b.addEventListener('click', function () { box.innerHTML = ''; onPick(it); });
+          box.appendChild(b);
+        });
+    });
+  }
+
   // ---------- 購入 ----------
 
   function openBuy(jan) {
@@ -164,7 +196,9 @@
     $('buyExpiry').value = '';
     $('buySubmit').disabled = false;
     setStatus('buyNameStatus', '商品名を検索しています…', '');
+    $('buySug').innerHTML = '';
     show('buyView');
+    loadItems();
     api('lookup', { jan: jan }).then(function (r) {
       if (r.name) {
         $('buyName').value = r.name;
@@ -206,13 +240,25 @@
     $('useName').textContent = '';
     $('useLots').innerHTML = '';
     $('useForm').classList.add('hidden');
+    $('useLink').classList.add('hidden');
+    $('useSug').innerHTML = '';
+    $('useSearch').value = '';
+    $('useLinkNote').textContent = '';
+    linkName = '';
     setStatus('useStatus', '在庫を確認しています…', '');
     show('useView');
     api('lookup', { jan: jan }).then(function (r) {
       if (!r.registered || r.total < 1) {
         $('useName').textContent = r.name || '';
-        setStatus('useStatus', r.registered ? '在庫がありません' : '登録されていない商品です', 'err');
-        return;
+        if (r.registered) {
+          setStatus('useStatus', '在庫がありません', 'err');
+          return;
+        }
+        setStatus('useStatus', 'このJANは未登録です', 'warn');
+        return loadItems().then(function () {
+          $('useLink').classList.remove('hidden');
+          $('useSearch').focus();
+        });
       }
       useTotal = r.total;
       $('useName').textContent = r.name;
@@ -226,12 +272,27 @@
     }).catch(function (e) { setStatus('useStatus', e.message, 'err'); });
   }
 
+  function pickUseItem(it) {
+    linkName = it.name;
+    useTotal = it.total;
+    $('useSearch').value = it.name;
+    $('useName').textContent = it.name;
+    setStatus('useStatus', '在庫 合計 ' + it.total + '個', 'ok');
+    $('useLinkNote').textContent = 'この商品にJAN ' + currentJan + ' を紐付けます(次回からはスキャンだけで消費できます)';
+    $('useLots').innerHTML = it.lots.map(function (l) {
+      return '<tr><td>期限 ' + esc(l.expiry) + '</td><td>' + l.count + '個</td></tr>';
+    }).join('');
+    $('useQty').value = 1;
+    $('useQty').max = it.total;
+    $('useForm').classList.remove('hidden');
+  }
+
   function submitUse() {
     var qty = parseInt($('useQty').value, 10);
     if (!(qty >= 1)) return alert('個数を入力してください');
     if (qty > useTotal) return alert('在庫(' + useTotal + '個)より多く消費できません');
     $('useSubmit').disabled = true;
-    api('consume', { jan: currentJan, qty: qty }).then(function (r) {
+    api('consume', { jan: currentJan, qty: qty, linkName: linkName || undefined }).then(function (r) {
       $('useSubmit').disabled = false;
       done('✅', r.name + ' を ' + r.consumed + '個 消費しました\n残り ' + r.remaining + '個');
     }).catch(function (e) {
@@ -290,6 +351,22 @@
       if (!validJan(code)) return alert('JANコードが正しくありません(8/12/13桁)');
       onJan(code);
     };
+    attachSuggest($('buyName'), $('buySug'), function () { return items; }, function (it) {
+      $('buyName').value = it.name;
+      setStatus('buyNameStatus', it.jan ? 'リストの商品を選択しました' : 'リストの商品を選択しました(JANを紐付けます)', 'ok');
+    });
+    attachSuggest($('useSearch'), $('useSug'), function () {
+      return items.filter(function (it) { return it.total > 0 && !it.jan; });
+    }, pickUseItem);
+    $('useSearch').addEventListener('input', function () {
+      if (linkName && $('useSearch').value !== linkName) {
+        linkName = '';
+        $('useForm').classList.add('hidden');
+        $('useLots').innerHTML = '';
+        $('useName').textContent = '';
+        $('useLinkNote').textContent = '';
+      }
+    });
     $('buySubmit').onclick = submitBuy;
     $('useSubmit').onclick = submitUse;
     $('buyBack').onclick = $('useBack').onclick = startScan;

@@ -27,6 +27,7 @@ function doPost(e) {
     try {
       switch (req.action) {
         case 'lookup': res = hjLookup_(req); break;
+        case 'items': res = hjItems_(); break;
         case 'register': res = hjRegister_(req); break;
         case 'consume': res = hjConsume_(req); break;
         default: throw new Error('不正なリクエストです');
@@ -145,6 +146,41 @@ function hjLookup_(req) {
   };
 }
 
+/** 商品名ごとの在庫一覧(文字入力の候補用)。jan が空の商品は未紐付け */
+function hjItems_() {
+  var map = {};
+  hjRows_(hjSheet_()).forEach(function (r) {
+    var k = r.name.trim();
+    var it = map[k] || (map[k] = { name: k, total: 0, jan: '', lots: [] });
+    if (r.jan && !it.jan) it.jan = r.jan;
+    if (r.count > 0) {
+      it.total += r.count;
+      it.lots.push({ expiry: r.expiry, count: r.count });
+    }
+  });
+  var items = Object.keys(map).map(function (k) { return map[k]; });
+  items.forEach(function (it) {
+    it.lots.sort(function (a, b) { return a.expiry < b.expiry ? -1 : a.expiry > b.expiry ? 1 : 0; });
+  });
+  return { items: items };
+}
+
+/**
+ * 同名でJAN未設定の行にJANを紐付ける(同名で別JANの行が既にあれば何もしない)。
+ * 紐付けた行数を返す
+ */
+function hjLinkBlank_(sheet, rows, name, jan) {
+  name = String(name).trim();
+  var named = rows.filter(function (r) { return r.name.trim() === name; });
+  if (named.some(function (r) { return r.jan && r.jan !== jan; })) return 0;
+  var blanks = named.filter(function (r) { return !r.jan; });
+  blanks.forEach(function (r) {
+    sheet.getRange(r.row, HJ_COL_JAN).setNumberFormat('@').setValue(jan);
+    r.jan = jan;
+  });
+  return blanks.length;
+}
+
 function hjRegister_(req) {
   var jan = hjCheckJan_(req.jan);
   var qty = hjCheckQty_(req.qty);
@@ -157,7 +193,8 @@ function hjRegister_(req) {
 
   var sheet = hjSheet_();
   var rows = hjRows_(sheet);
-  var same = rows.filter(function (r) { return r.jan === jan && r.expiry === expiry && r.count > 0; })[0];
+  hjLinkBlank_(sheet, rows, name, jan);
+  var same =rows.filter(function (r) { return r.jan === jan && r.expiry === expiry && r.count > 0; })[0];
   var total;
   if (same) {
     total = same.count + qty;
@@ -178,8 +215,13 @@ function hjConsume_(req) {
   var jan = hjCheckJan_(req.jan);
   var qty = hjCheckQty_(req.qty);
   var sheet = hjSheet_();
-  var stock = hjStockByJan_(hjRows_(sheet), jan);
-  var total = stock.reduce(function (s, r) { return s + r.count; }, 0);
+  var rows = hjRows_(sheet);
+  if (req.linkName) {
+    if (rows.some(function (r) { return r.jan === jan; })) throw new Error('このJANは既に紐付け済みです');
+    if (!hjLinkBlank_(sheet, rows, req.linkName, jan)) throw new Error('紐付けできる商品が見つかりません');
+  }
+  var stock = hjStockByJan_(rows, jan);
+  var total =stock.reduce(function (s, r) { return s + r.count; }, 0);
   if (!stock.length) throw new Error('登録されていない商品です');
   if (qty > total) throw new Error('在庫(' + total + '個)より多く消費できません');
 
